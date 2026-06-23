@@ -2,7 +2,9 @@ import { PrismaClient } from "../lib/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { randomBytes } from "crypto";
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+const url = new URL(process.env.DATABASE_URL!);
+url.searchParams.set("sslmode", "require");
+const adapter = new PrismaPg({ connectionString: url.toString() });
 const prisma = new PrismaClient({ adapter });
 
 function generateLicenseKey(): string {
@@ -25,11 +27,12 @@ async function main() {
       version: "3.2",
       description: "Latest stable release with multi-timeframe analysis and optimized memory usage.",
       fileName: "nexova-trader-v3.2.exe",
-      fileSize: 8_589_934, // ~8.2 MB
+      fileSize: 8_589_934,
       fileUrl: "/downloads/nexova-trader-v3.2.exe",
       os: "Windows 10/11 64-bit",
       published: true,
-      changelog: "• New multi-timeframe analysis engine\n• Optimized memory usage (-40%)\n• Added BitGet exchange support\n• Fixed WebSocket reconnection bug\n• Improved order execution latency",
+      changelog:
+        "• New multi-timeframe analysis engine\n• Optimized memory usage (-40%)\n• Added BitGet exchange support\n• Fixed WebSocket reconnection bug\n• Improved order execution latency",
     },
   });
 
@@ -46,14 +49,15 @@ async function main() {
       fileUrl: "/downloads/nexova-trader-v3.1.exe",
       os: "Windows 10/11 64-bit",
       published: true,
-      changelog: "• Custom indicator scripting API\n• Improved backtesting accuracy\n• New alert conditions system\n• Performance optimizations",
+      changelog:
+        "• Custom indicator scripting API\n• Improved backtesting accuracy\n• New alert conditions system\n• Performance optimizations",
     },
   });
 
-  console.log(`  ✅ Created product: ${v32.name} v${v32.version}`);
+  console.log(`  ✅ Product: ${v32.name} v${v32.version}`);
 
-  // Create admin user (CEO)
-  const ceoUser = await prisma.user.upsert({
+  // Admin users
+  const ceo = await prisma.user.upsert({
     where: { email: "ceo@nexova.app" },
     update: {},
     create: {
@@ -64,7 +68,7 @@ async function main() {
     },
   });
 
-  const coFounderUser = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "olivia@nexova.app" },
     update: {},
     create: {
@@ -75,11 +79,10 @@ async function main() {
     },
   });
 
-  console.log(`  ✅ Created admin: ${ceoUser.name}`);
-  console.log(`  ✅ Created admin: ${coFounderUser.name}`);
+  console.log(`  ✅ Admin: ${ceo.name}`);
 
-  // Create demo user with license
-  const demoUser = await prisma.user.upsert({
+  // Demo user with license
+  const demo = await prisma.user.upsert({
     where: { email: "demo@nexova.app" },
     update: {},
     create: {
@@ -90,7 +93,7 @@ async function main() {
     },
   });
 
-  const demoLicenseKey = generateLicenseKey();
+  const demoKey = generateLicenseKey();
   const demoPurchase = await prisma.purchase.create({
     data: {
       amount: 599,
@@ -98,58 +101,46 @@ async function main() {
       status: "completed",
       paymentMethod: "card",
       paymentId: "pi_demo_001",
-      userId: demoUser.id,
+      userId: demo.id,
     },
   });
 
   await prisma.license.create({
     data: {
-      key: demoLicenseKey,
+      key: demoKey,
       plan: "Professional",
       status: "active",
       maxActivations: 3,
       usedActivations: 1,
-      userId: demoUser.id,
+      userId: demo.id,
       purchaseId: demoPurchase.id,
     },
   });
 
-  console.log(`  ✅ Created demo user: ${demoUser.name}`);
-  console.log(`  ✅ License key: ${demoLicenseKey}`);
+  console.log(`  ✅ Demo: ${demo.name} (key: ${demoKey})`);
 
-  // Create some sample purchases and licenses for stats
-  const sampleUsers = [
-    { name: "Alex Thompson", email: "alex@example.com" },
-    { name: "Sarah Mitchell", email: "sarah@example.io" },
-    { name: "James Wilson", email: "james@example.co" },
+  // Sample users
+  const samples = [
+    { name: "Alex Thompson", email: "alex@example.com", plan: "Professional", amount: 599 },
+    { name: "Sarah Mitchell", email: "sarah@example.io", plan: "Professional", amount: 599 },
+    { name: "James Wilson", email: "james@example.co", plan: "Standard", amount: 299 },
   ];
 
-  for (const su of sampleUsers) {
+  for (const s of samples) {
     const user = await prisma.user.upsert({
-      where: { email: su.email },
+      where: { email: s.email },
       update: {},
-      create: {
-        clerkId: `sample-${su.email}`,
-        email: su.email,
-        name: su.name,
-        role: "USER",
-      },
+      create: { clerkId: `sample-${s.email}`, email: s.email, name: s.name, role: "USER" },
     });
 
     const purchase = await prisma.purchase.create({
-      data: {
-        amount: su.name === "James Wilson" ? 299 : 599,
-        plan: su.name === "James Wilson" ? "Standard" : "Professional",
-        status: "completed",
-        paymentMethod: "card",
-        userId: user.id,
-      },
+      data: { amount: s.amount, plan: s.plan, status: "completed", paymentMethod: "card", userId: user.id },
     });
 
     await prisma.license.create({
       data: {
         key: generateLicenseKey(),
-        plan: purchase.plan,
+        plan: s.plan,
         status: "active",
         maxActivations: 3,
         usedActivations: 1,
@@ -158,17 +149,11 @@ async function main() {
       },
     });
 
-    // Record a download for each
     await prisma.download.create({
-      data: {
-        version: "3.2",
-        productId: v32.id,
-        userId: user.id,
-        ip: "192.168.1.1",
-      },
+      data: { version: "3.2", productId: v32.id, userId: user.id },
     });
 
-    console.log(`  ✅ Created user: ${su.name}`);
+    console.log(`  ✅ Sample: ${s.name}`);
   }
 
   console.log("\n🎉 Seeding complete!");
