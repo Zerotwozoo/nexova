@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  image     String?
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  licenses  License[]
+  purchases Purchase[]
+  downloads Download[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  version     String
+  description String
+  fileName    String
+  fileSize    Int
+  fileUrl     String
+  os          String
+  published   Boolean  @default(false)
+  changelog   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  downloads Download[]
+}
+
+model License {
+  id              String    @id @default(cuid())
+  key             String    @unique
+  plan            String
+  status          String    @default("active")
+  maxActivations  Int       @default(3)
+  usedActivations Int       @default(0)
+  expiresAt       DateTime?
+  activatedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchaseId      String?   @unique
+  purchase        Purchase? @relation(fields: [purchaseId], references: [id])
+}
+
+model Purchase {
+  id            String    @id @default(cuid())
+  amount        Float
+  plan          String
+  status        String    @default("completed")
+  paymentMethod String?
+  paymentId     String?
+  createdAt     DateTime  @default(now())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  license       License?
+}
+
+model Download {
+  id        String   @id @default(cuid())
+  version   String
+  ip        String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+}
